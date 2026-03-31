@@ -3,8 +3,11 @@
 Claw Dev is a local multi-provider coding assistant launcher for the bundled terminal client in this repository. It gives you one entry point and lets you choose how model requests are resolved at startup:
 
 - Anthropic account login or `ANTHROPIC_API_KEY`
+- OpenAI through a local Anthropic-compatible proxy
 - Google Gemini through a local Anthropic-compatible proxy
 - Groq through a local Anthropic-compatible proxy
+- Copilot through the GitHub Models API
+- z.ai through a local Anthropic-compatible proxy
 - Ollama through a local Anthropic-compatible proxy
 
 Claw Dev is designed to feel like one tool rather than a provider-specific wrapper. The launcher, provider prompts, environment variables, and documentation are all centered around the `Claw Dev` name.
@@ -12,9 +15,9 @@ Claw Dev is designed to feel like one tool rather than a provider-specific wrapp
 ## Repository Layout
 
 - `Leonxlnx-claude-code/`
-  - bundled terminal client and Windows launchers
+  - bundled terminal client and platform launchers
 - `src/anthropicCompatProxy.ts`
-  - local Anthropic-compatible proxy used for Gemini, Groq, and Ollama
+  - local Anthropic-compatible proxy used for OpenAI, Gemini, Groq, Ollama, Copilot, and z.ai
 - `.env.example`
   - optional environment template for local setup
 - `package.json`
@@ -25,6 +28,10 @@ Claw Dev is designed to feel like one tool rather than a provider-specific wrapp
 ### Anthropic
 
 Use the bundled client with the normal Anthropic login flow or with `ANTHROPIC_API_KEY`.
+
+### OpenAI
+
+Use an OpenAI API key and route requests through the local compatibility proxy.
 
 ### Gemini
 
@@ -40,6 +47,14 @@ Use a local or remote Ollama server and route requests through the local compati
 
 This is the best option if you want local inference and do not want to depend on a cloud API provider.
 
+### Copilot
+
+Use a GitHub Models-compatible bearer token and route requests through the local compatibility proxy.
+
+### z.ai
+
+Use a z.ai API key and route requests through the local compatibility proxy.
+
 ## Requirements
 
 Install the following before you begin:
@@ -52,6 +67,8 @@ Provider-specific requirements:
 
 - Anthropic
   - an Anthropic account for in-app login, or `ANTHROPIC_API_KEY`
+- OpenAI
+  - `OPENAI_API_KEY`
 - Gemini
   - `GEMINI_API_KEY`
 - Groq
@@ -59,6 +76,10 @@ Provider-specific requirements:
 - Ollama
   - a running Ollama installation
   - at least one pulled model, such as `qwen3`
+- Copilot
+  - `COPILOT_TOKEN` or another GitHub Models-compatible bearer token
+- z.ai
+  - `ZAI_API_KEY`
 
 ## System Requirements
 
@@ -66,9 +87,12 @@ Provider-specific requirements:
 
 These requirements apply to Claw Dev itself:
 
-- Windows PowerShell or Command Prompt
 - Node.js 22+
 - enough free disk space for Node dependencies and any local model assets you choose to install
+- one of the following shells:
+  - Windows PowerShell or Command Prompt
+  - macOS Terminal, iTerm2, `bash`, or `zsh`
+  - Linux terminal with `bash` or `zsh`
 
 ### Ollama platform notes
 
@@ -101,7 +125,7 @@ This guidance is an implementation recommendation based on Ollama's documented r
 
 ## Installation
 
-From the repository root:
+From the repository root on Windows:
 
 ```powershell
 cd E:\myclaudecode
@@ -109,31 +133,93 @@ npm install
 copy .env.example .env
 ```
 
+From the repository root on macOS or Linux:
+
+```bash
+cd /path/to/myclaudecode
+npm install
+cp .env.example .env
+```
+
 Editing `.env` is optional. Claw Dev can prompt for missing values interactively when it starts.
 
 ## Quick Start
 
-Start Claw Dev from the repository root:
+Start Claw Dev from the repository root on any platform:
 
-```powershell
+```bash
 npm run claw-dev
 ```
 
-Or launch it directly from the bundled client directory:
+Or launch it directly from the bundled client directory on Windows:
 
 ```powershell
 cd E:\myclaudecode\Leonxlnx-claude-code
 .\claw-dev.cmd
 ```
 
+Or launch it directly from the bundled client directory on macOS or Linux:
+
+```bash
+cd /path/to/myclaudecode/Leonxlnx-claude-code
+chmod +x ./claw-dev.sh
+./claw-dev.sh
+```
+
 When Claw Dev starts, it shows a provider selector:
 
 1. Anthropic
-2. Gemini
-3. Groq
-4. Ollama
+2. OpenAI
+3. Gemini
+4. Groq
+5. Copilot
+6. z.ai
+7. Ollama
 
 If a required API key is missing, Claw Dev prompts for it.
+
+After you choose a provider, Claw Dev also lets you enter any model id you want for that session. You can press Enter to keep the suggested default, or type a custom model id such as:
+
+- `gpt-4.1`
+- `gpt-4o-mini`
+- `gemini-2.5-pro`
+- `openai/gpt-oss-120b`
+- `openai/o4-mini`
+- `qwen2.5-coder:14b`
+
+This makes model selection flexible even when the bundled in-app `/model` picker still shows provider-specific legacy labels.
+
+## Additional Cloud Provider Setup
+
+### Copilot
+
+Recommended `.env` values:
+
+```env
+COPILOT_TOKEN=your_github_models_token_here
+COPILOT_MODEL=openai/gpt-4.1-mini
+COPILOT_MODEL_SONNET=openai/gpt-4.1-mini
+COPILOT_MODEL_OPUS=openai/gpt-4.1
+COPILOT_MODEL_HAIKU=openai/gpt-4.1-mini
+```
+
+### z.ai
+
+Recommended `.env` values:
+
+```env
+ZAI_API_KEY=your_zai_api_key_here
+ZAI_MODEL=glm-5
+```
+
+### OpenAI
+
+Recommended `.env` values:
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
 
 ## How To Use Ollama With Claw Dev
 
@@ -265,6 +351,13 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ```
 
+### OpenAI
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
+
 ### Gemini
 
 ```env
@@ -290,6 +383,23 @@ OLLAMA_NUM_CTX=2048
 OLLAMA_NUM_PREDICT=128
 ```
 
+### Copilot
+
+```env
+COPILOT_TOKEN=your_github_models_token_here
+COPILOT_MODEL=openai/gpt-4.1-mini
+COPILOT_MODEL_SONNET=openai/gpt-4.1-mini
+COPILOT_MODEL_OPUS=openai/gpt-4.1
+COPILOT_MODEL_HAIKU=openai/gpt-4.1-mini
+```
+
+### z.ai
+
+```env
+ZAI_API_KEY=your_zai_api_key_here
+ZAI_MODEL=glm-5
+```
+
 ## Useful Commands
 
 Check the installed launcher version:
@@ -299,14 +409,60 @@ cd E:\myclaudecode\Leonxlnx-claude-code
 .\claw-dev.cmd --version
 ```
 
+Check the installed launcher version on macOS or Linux:
+
+```bash
+cd /path/to/myclaudecode/Leonxlnx-claude-code
+chmod +x ./claw-dev.sh
+./claw-dev.sh --version
+```
+
 Skip the provider menu and force a specific provider:
 
 ```powershell
 .\claw-dev.cmd --provider anthropic
+.\\claw-dev.cmd --provider openai
 .\claw-dev.cmd --provider gemini
 .\claw-dev.cmd --provider groq
+.\claw-dev.cmd --provider copilot
+.\claw-dev.cmd --provider zai
 .\claw-dev.cmd --provider ollama
 ```
+
+You can also skip the default model prompt and force any model id directly:
+
+```powershell
+.\claw-dev.cmd --provider openai --model gpt-4.1
+.\claw-dev.cmd --provider gemini --model gemini-2.5-pro
+.\claw-dev.cmd --provider groq --model openai/gpt-oss-120b
+.\claw-dev.cmd --provider copilot --model openai/o4-mini
+.\claw-dev.cmd --provider zai --model glm-4.5
+.\claw-dev.cmd --provider ollama --model qwen2.5-coder:14b
+```
+
+Equivalent macOS or Linux examples:
+
+```bash
+./claw-dev.sh --provider openai --model gpt-4.1
+./claw-dev.sh --provider ollama --model qwen2.5-coder:14b
+```
+
+If you want extra suggestions to appear in the proxy model catalog, you can define optional comma-separated model lists:
+
+```env
+OPENAI_MODELS=gpt-4.1-mini,gpt-4.1,gpt-4o-mini,gpt-4o,o4-mini
+GEMINI_MODELS=gemini-2.5-flash,gemini-2.5-pro,gemma-3-27b-it
+GROQ_MODELS=openai/gpt-oss-20b,openai/gpt-oss-120b,qwen/qwen3-32b
+COPILOT_MODELS=openai/gpt-4.1-mini,openai/gpt-4.1,openai/gpt-4o,openai/o4-mini
+ZAI_MODELS=glm-5,glm-4.5,glm-4.5-air
+OLLAMA_MODELS=qwen3,qwen2.5-coder:7b,qwen2.5-coder:14b,deepseek-r1:8b
+```
+
+Important note:
+
+- the startup model override accepts any model id
+- the bundled `/model` command inside the client is still based on the bundled UI, so its labels may not match your provider exactly
+- Claw Dev uses your startup model choice as the real backend model for the session
 
 Legacy aliases are still accepted:
 
@@ -363,7 +519,7 @@ Claw Dev works in two modes:
   - the bundled client talks to Anthropic directly
 - Compatibility mode
   - the bundled client talks to the local proxy
-  - the local proxy translates Anthropic-style `/v1/messages` requests into Gemini, Groq, or Ollama API calls
+  - the local proxy translates Anthropic-style `/v1/messages` requests into OpenAI, Gemini, Groq, Ollama, Copilot, or z.ai API calls
 
 This keeps the terminal experience consistent while allowing different model backends.
 
@@ -441,4 +597,6 @@ Official documentation used for this setup:
 - [Ollama API Authentication](https://docs.ollama.com/api/authentication)
 - [Ollama FAQ](https://docs.ollama.com/faq)
 - [Anthropic Claude Code Quickstart](https://code.claude.com/docs/en/quickstart)
+- [OpenAI Chat Completions](https://platform.openai.com/docs/api-reference/chat/create)
 - [Groq Docs](https://console.groq.com/docs)
+- [GitHub Models API announcement](https://github.blog/changelog/2025-05-15-github-models-api-now-available)

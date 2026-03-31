@@ -6,7 +6,7 @@ import { config as loadEnv } from "dotenv";
 
 loadEnv({ quiet: true });
 
-type CompatProvider = "gemini" | "groq" | "ollama";
+type CompatProvider = "openai" | "gemini" | "groq" | "ollama" | "copilot" | "zai";
 
 type AnthropicMessageRequest = {
   model?: string;
@@ -69,8 +69,15 @@ const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY?.trim();
 const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE?.trim();
 const OLLAMA_NUM_CTX = parseOptionalInt(process.env.OLLAMA_NUM_CTX);
 const OLLAMA_NUM_PREDICT = parseOptionalInt(process.env.OLLAMA_NUM_PREDICT);
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
 const GROQ_API_KEY = process.env.GROQ_API_KEY?.trim();
+const COPILOT_TOKEN =
+  process.env.COPILOT_TOKEN?.trim() ||
+  process.env.GITHUB_MODELS_TOKEN?.trim() ||
+  process.env.GITHUB_TOKEN?.trim() ||
+  process.env.GH_TOKEN?.trim();
+const ZAI_API_KEY = process.env.ZAI_API_KEY?.trim();
 const geminiClient = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 assertProviderConfiguration();
@@ -140,7 +147,7 @@ function resolveProvider(): CompatProvider {
   const raw = (
     process.env.ANTHROPIC_COMPAT_PROVIDER ??
     process.env.CLAW_PROVIDER ??
-    "gemini"
+    "openai"
   )
     .trim()
     .toLowerCase();
@@ -149,7 +156,19 @@ function resolveProvider(): CompatProvider {
     return "groq";
   }
 
-  if (raw === "gemini" || raw === "groq" || raw === "ollama") {
+  if (raw === "github" || raw === "github-models") {
+    return "copilot";
+  }
+
+  if (raw === "z.ai") {
+    return "zai";
+  }
+
+  if (raw === "chatgpt") {
+    return "openai";
+  }
+
+  if (raw === "openai" || raw === "gemini" || raw === "groq" || raw === "ollama" || raw === "copilot" || raw === "zai") {
     return raw;
   }
 
@@ -158,33 +177,57 @@ function resolveProvider(): CompatProvider {
 
 function defaultPortFor(provider: CompatProvider): string {
   switch (provider) {
-    case "gemini":
+    case "openai":
       return "8787";
-    case "groq":
+    case "gemini":
       return "8788";
-    case "ollama":
+    case "groq":
       return "8789";
+    case "ollama":
+      return "8792";
+    case "copilot":
+      return "8790";
+    case "zai":
+      return "8791";
   }
 }
 
 function resolveModel(provider: CompatProvider): string {
   switch (provider) {
+    case "openai":
+      return process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
     case "gemini":
       return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
     case "groq":
       return process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-20b";
     case "ollama":
       return process.env.OLLAMA_MODEL?.trim() || "qwen3";
+    case "copilot":
+      return process.env.COPILOT_MODEL?.trim() || "openai/gpt-4.1-mini";
+    case "zai":
+      return process.env.ZAI_MODEL?.trim() || "glm-5";
   }
 }
 
 function assertProviderConfiguration(): void {
+  if (PROVIDER === "openai" && !OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is required when ANTHROPIC_COMPAT_PROVIDER=openai");
+  }
+
   if (PROVIDER === "gemini" && !GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is required when ANTHROPIC_COMPAT_PROVIDER=gemini");
   }
 
   if (PROVIDER === "groq" && !GROQ_API_KEY) {
     throw new Error("GROQ_API_KEY is required when ANTHROPIC_COMPAT_PROVIDER=groq");
+  }
+
+  if (PROVIDER === "copilot" && !COPILOT_TOKEN) {
+    throw new Error("COPILOT_TOKEN or GITHUB_MODELS_TOKEN is required when ANTHROPIC_COMPAT_PROVIDER=copilot");
+  }
+
+  if (PROVIDER === "zai" && !ZAI_API_KEY) {
+    throw new Error("ZAI_API_KEY is required when ANTHROPIC_COMPAT_PROVIDER=zai");
   }
 }
 
@@ -219,12 +262,7 @@ function buildOllamaRuntimeConfig(): Record<string, unknown> {
 }
 
 function buildModelsPage() {
-  const ids = [
-    "claude-sonnet-4-20250514",
-    "claude-3-7-sonnet-latest",
-    "claude-3-5-haiku-latest",
-    "claude-opus-4-1-20250805",
-  ];
+  const ids = providerModelCatalog(PROVIDER);
 
   return {
     data: ids.map((id) => buildModelInfo(id)),
@@ -243,31 +281,152 @@ function buildModelInfo(id: string) {
   };
 }
 
+function providerModelCatalog(provider: CompatProvider): string[] {
+  const customCatalog = providerCustomCatalog(provider);
+
+  switch (provider) {
+    case "openai":
+      return uniqueStrings([ACTIVE_MODEL, ...customCatalog, "gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"]);
+    case "gemini":
+      return uniqueStrings([ACTIVE_MODEL, ...customCatalog, "gemini-2.5-flash", "gemini-2.5-pro", "gemma-3-27b-it"]);
+    case "groq":
+      return uniqueStrings([
+        ACTIVE_MODEL,
+        ...customCatalog,
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3-32b",
+      ]);
+    case "copilot":
+      return uniqueStrings([
+        ACTIVE_MODEL,
+        process.env.COPILOT_MODEL_SONNET?.trim() || "",
+        process.env.COPILOT_MODEL_OPUS?.trim() || "",
+        process.env.COPILOT_MODEL_HAIKU?.trim() || "",
+        ...customCatalog,
+        "openai/gpt-4.1-mini",
+        "openai/gpt-4.1",
+        "openai/gpt-4o",
+        "openai/o4-mini",
+      ]);
+    case "zai":
+      return uniqueStrings([ACTIVE_MODEL, ...customCatalog, "glm-5", "glm-4.5", "glm-4.5-air"]);
+    case "ollama":
+      return uniqueStrings([
+        process.env.OLLAMA_MODEL?.trim() || "qwen3",
+        ...customCatalog,
+        "qwen3",
+        "qwen2.5-coder:7b",
+        "qwen2.5-coder:14b",
+        "deepseek-r1:8b",
+      ]);
+  }
+}
+
+function resolveRequestModel(body: AnthropicMessageRequest): string {
+  const requested = body.model?.trim();
+  if (!requested) {
+    return ACTIVE_MODEL;
+  }
+
+  if (PROVIDER === "copilot") {
+    return resolveCopilotRequestedModel(requested);
+  }
+
+  const catalog = providerModelCatalog(PROVIDER);
+  if (catalog.includes(requested)) {
+    return requested;
+  }
+
+  // Allow custom model ids for user-managed providers even if they are not in the default catalog.
+  if (
+    PROVIDER === "ollama" ||
+    PROVIDER === "zai" ||
+    PROVIDER === "groq" ||
+    PROVIDER === "openai" ||
+    PROVIDER === "gemini"
+  ) {
+    return requested;
+  }
+
+  return ACTIVE_MODEL;
+}
+
+function resolveCopilotRequestedModel(requested: string): string {
+  const normalized = requested.trim().toLowerCase();
+
+  if (providerModelCatalog("copilot").includes(requested)) {
+    return requested;
+  }
+
+  if (normalized.includes("opus")) {
+    return process.env.COPILOT_MODEL_OPUS?.trim() || "openai/gpt-4.1";
+  }
+
+  if (normalized.includes("haiku")) {
+    return process.env.COPILOT_MODEL_HAIKU?.trim() || "openai/gpt-4.1-mini";
+  }
+
+  if (normalized.includes("sonnet") || normalized.startsWith("claude-")) {
+    return process.env.COPILOT_MODEL_SONNET?.trim() || process.env.COPILOT_MODEL?.trim() || "openai/gpt-4.1-mini";
+  }
+
+  return requested;
+}
+
 function providerLabel(provider: CompatProvider): string {
   switch (provider) {
+    case "openai":
+      return "OpenAI";
     case "gemini":
       return "Google Gemini";
     case "groq":
       return "Groq";
     case "ollama":
       return "Ollama";
+    case "copilot":
+      return "GitHub Copilot";
+    case "zai":
+      return "Z.AI";
   }
+}
+
+function providerCustomCatalog(provider: CompatProvider): string[] {
+  const envKey = `${provider.toUpperCase()}_MODELS`;
+  return (process.env[envKey] ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 async function handleMessages(body: AnthropicMessageRequest) {
   const requestId = `req_${randomUUID()}`;
-  const requestedModel = body.model?.trim() || "claude-sonnet-4-20250514";
+  const providerModel = resolveRequestModel(body);
+  const responseModel = body.model?.trim() || providerModel;
 
   let content: AnthropicContentBlock[];
   switch (PROVIDER) {
+    case "openai":
+      content = await runOpenAI(body, providerModel);
+      break;
     case "gemini":
-      content = await runGemini(body);
+      content = await runGemini(body, providerModel);
       break;
     case "groq":
-      content = await runGroq(body);
+      content = await runGroq(body, providerModel);
       break;
     case "ollama":
-      content = await runOllama(body);
+      content = await runOllama(body, providerModel);
+      break;
+    case "copilot":
+      content = await runCopilot(body, providerModel);
+      break;
+    case "zai":
+      content = await runZai(body, providerModel);
       break;
   }
 
@@ -275,7 +434,7 @@ async function handleMessages(body: AnthropicMessageRequest) {
     id: `msg_${randomUUID()}`,
     type: "message",
     role: "assistant",
-    model: requestedModel,
+    model: responseModel,
     content,
     stop_reason: content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn",
     stop_sequence: null,
@@ -291,19 +450,54 @@ async function handleMessages(body: AnthropicMessageRequest) {
   return { requestId, message };
 }
 
-async function runGemini(body: AnthropicMessageRequest): Promise<AnthropicContentBlock[]> {
+async function runOpenAI(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
+  const toolNameById = new Map<string, string>();
+  const systemInstruction = normalizeSystemPrompt(body.system);
+  const rawMessages = anthropicMessagesToOpenAICompatible(
+    body.messages ?? [],
+    toolNameById,
+    systemInstruction,
+    { includeToolNameOnToolMessages: false },
+  );
+  const rawTools = anthropicToolsToOpenAITools(body.tools ?? []);
+  const { messages, tools } = compactOpenAICompatibleRequest(systemInstruction, rawMessages, rawTools, "openai");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 0 ? { tool_choice: buildOpenAIToolChoice(body.tool_choice) } : {}),
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const json = (await response.json()) as Record<string, unknown>;
+  return openAIMessageToAnthropicContent(extractOpenAIMessage(json), true);
+}
+
+async function runGemini(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
   if (!geminiClient) {
     throw new Error("Gemini client is not configured");
   }
 
   const toolNameById = new Map<string, string>();
   const systemInstruction = normalizeSystemPrompt(body.system);
-  const contents = anthropicMessagesToGemini(body.messages ?? [], toolNameById, systemInstruction, ACTIVE_MODEL);
+  const contents = anthropicMessagesToGemini(body.messages ?? [], toolNameById, systemInstruction, model);
   const toolDeclarations = anthropicToolsToGemini(body.tools ?? []);
-  const useInlineSystemPrompt = shouldInlineSystemPrompt(ACTIVE_MODEL);
+  const useInlineSystemPrompt = shouldInlineSystemPrompt(model);
 
   const response = await geminiClient.models.generateContent({
-    model: ACTIVE_MODEL,
+    model,
     contents,
     config: {
       ...(!useInlineSystemPrompt && systemInstruction ? { systemInstruction } : {}),
@@ -325,16 +519,17 @@ async function runGemini(body: AnthropicMessageRequest): Promise<AnthropicConten
   return geminiPartsToAnthropicContent(candidateParts);
 }
 
-async function runGroq(body: AnthropicMessageRequest): Promise<AnthropicContentBlock[]> {
+async function runGroq(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
   const toolNameById = new Map<string, string>();
   const systemInstruction = normalizeSystemPrompt(body.system);
-  const messages = anthropicMessagesToOpenAICompatible(
+  const rawMessages = anthropicMessagesToOpenAICompatible(
     body.messages ?? [],
     toolNameById,
     systemInstruction,
     { includeToolNameOnToolMessages: false },
   );
-  const tools = anthropicToolsToOpenAITools(body.tools ?? []);
+  const rawTools = anthropicToolsToOpenAITools(body.tools ?? []);
+  const { messages, tools } = compactOpenAICompatibleRequest(systemInstruction, rawMessages, rawTools, "groq");
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -343,7 +538,7 @@ async function runGroq(body: AnthropicMessageRequest): Promise<AnthropicContentB
       Authorization: `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: ACTIVE_MODEL,
+      model,
       messages,
       ...(tools.length > 0 ? { tools } : {}),
       ...(tools.length > 0 ? { tool_choice: buildOpenAIToolChoice(body.tool_choice) } : {}),
@@ -359,7 +554,7 @@ async function runGroq(body: AnthropicMessageRequest): Promise<AnthropicContentB
   return openAIMessageToAnthropicContent(extractOpenAIMessage(json), true);
 }
 
-async function runOllama(body: AnthropicMessageRequest): Promise<AnthropicContentBlock[]> {
+async function runOllama(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
   const toolNameById = new Map<string, string>();
   const systemInstruction = normalizeSystemPrompt(body.system);
   const messages = anthropicMessagesToOpenAICompatible(
@@ -377,7 +572,7 @@ async function runOllama(body: AnthropicMessageRequest): Promise<AnthropicConten
       ...(OLLAMA_API_KEY ? { Authorization: `Bearer ${OLLAMA_API_KEY}` } : {}),
     },
     body: JSON.stringify({
-      model: ACTIVE_MODEL,
+      model,
       messages,
       ...(tools.length > 0 ? { tools } : {}),
       ...buildOllamaRuntimeConfig(),
@@ -391,6 +586,77 @@ async function runOllama(body: AnthropicMessageRequest): Promise<AnthropicConten
 
   const json = (await response.json()) as Record<string, unknown>;
   return ollamaMessageToAnthropicContent(json.message);
+}
+
+async function runCopilot(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
+  const toolNameById = new Map<string, string>();
+  const systemInstruction = normalizeSystemPrompt(body.system);
+  const rawMessages = anthropicMessagesToOpenAICompatible(
+    body.messages ?? [],
+    toolNameById,
+    systemInstruction,
+    { includeToolNameOnToolMessages: false },
+  );
+  const rawTools = anthropicToolsToOpenAITools(body.tools ?? []);
+  const { messages, tools } = compactOpenAICompatibleRequest(systemInstruction, rawMessages, rawTools, "copilot");
+
+  const response = await fetch("https://models.github.ai/inference/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${COPILOT_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 0 ? { tool_choice: buildOpenAIToolChoice(body.tool_choice) } : {}),
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const json = (await response.json()) as Record<string, unknown>;
+  return openAIMessageToAnthropicContent(extractOpenAIMessage(json), true);
+}
+
+async function runZai(body: AnthropicMessageRequest, model: string): Promise<AnthropicContentBlock[]> {
+  const toolNameById = new Map<string, string>();
+  const systemInstruction = normalizeSystemPrompt(body.system);
+  const rawMessages = anthropicMessagesToOpenAICompatible(
+    body.messages ?? [],
+    toolNameById,
+    systemInstruction,
+    { includeToolNameOnToolMessages: false },
+  );
+  const rawTools = anthropicToolsToOpenAITools(body.tools ?? []);
+  const { messages, tools } = compactOpenAICompatibleRequest(systemInstruction, rawMessages, rawTools, "zai");
+
+  const response = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ZAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 0 ? { tool_choice: buildOpenAIToolChoice(body.tool_choice) } : {}),
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const json = (await response.json()) as Record<string, unknown>;
+  return openAIMessageToAnthropicContent(extractOpenAIMessage(json), true);
 }
 
 function anthropicMessagesToGemini(
@@ -580,6 +846,120 @@ function anthropicToolsToOpenAITools(tools: Array<Record<string, unknown>>) {
         function: { name: string; description: string; parameters: Record<string, unknown> };
       } => tool !== null,
     );
+}
+
+function compactOpenAICompatibleRequest(
+  systemInstruction: string,
+  messages: Array<Record<string, unknown>>,
+  tools: Array<{
+    type: "function";
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }>,
+  provider: "openai" | "groq" | "copilot" | "zai",
+) {
+  const budget = provider === "copilot" ? 6000 : provider === "openai" ? 12000 : 20000;
+  let compactMessages = trimOpenAICompatibleMessages(messages, provider);
+  let compactTools = compactOpenAICompatibleTools(tools, provider, "normal");
+
+  while (estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget && compactMessages.length > 4) {
+    compactMessages = compactMessages.slice(1);
+  }
+
+  if (estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget && compactTools.length > 12) {
+    compactTools = compactTools.slice(0, 12);
+  }
+
+  if (estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget && compactTools.length > 6) {
+    compactTools = compactTools.slice(0, 6);
+  }
+
+  if (provider === "copilot" && estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget) {
+    compactTools = compactOpenAICompatibleTools(compactTools, provider, "minimal");
+  }
+
+  while (provider === "copilot" && estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget && compactMessages.length > 2) {
+    compactMessages = compactMessages.slice(1);
+  }
+
+  while (provider === "copilot" && estimateOpenAICompatiblePayload(systemInstruction, compactMessages, compactTools) > budget && compactTools.length > 2) {
+    compactTools = compactTools.slice(0, Math.max(2, compactTools.length - 2));
+  }
+
+  return {
+    messages: compactMessages,
+    tools: compactTools,
+  };
+}
+
+function trimOpenAICompatibleMessages(
+  messages: Array<Record<string, unknown>>,
+  provider: "openai" | "groq" | "copilot" | "zai",
+): Array<Record<string, unknown>> {
+  if (provider !== "copilot") {
+    return [...messages];
+  }
+
+  return messages
+    .slice(-4)
+    .map((message) => {
+      const role = typeof message.role === "string" ? message.role : "user";
+      const content = typeof message.content === "string" ? message.content : "";
+      const trimmedContent =
+        role === "system"
+          ? content.slice(-700)
+          : role === "tool"
+            ? content.slice(-400)
+            : content.slice(-900);
+
+      return {
+        ...message,
+        ...(typeof message.content === "string" ? { content: trimmedContent } : {}),
+      };
+    });
+}
+
+function compactOpenAICompatibleTools(
+  tools: Array<{
+    type: "function";
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }>,
+  provider: "openai" | "groq" | "copilot" | "zai",
+  mode: "normal" | "minimal",
+) {
+  return tools.map((tool) => ({
+    ...tool,
+    function: {
+      ...tool.function,
+      description:
+        mode === "minimal"
+          ? ""
+          : tool.function.description.slice(0, provider === "copilot" ? 48 : 160),
+      parameters:
+        provider === "copilot" && mode === "minimal"
+          ? {
+              type: "object",
+              additionalProperties: true,
+            }
+          : tool.function.parameters,
+    },
+  }));
+}
+
+function estimateOpenAICompatiblePayload(
+  systemInstruction: string,
+  messages: Array<Record<string, unknown>>,
+  tools: Array<{
+    type: "function";
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }>,
+): number {
+  return Math.ceil(
+    JSON.stringify({
+      systemInstruction,
+      messages,
+      tools,
+    }).length / 4,
+  );
 }
 
 function buildGeminiFunctionCallingConfig(
