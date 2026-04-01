@@ -21,6 +21,10 @@ const replacements = [
   ["Claude Opus 4.6", "Claw Dev Opus Slot"],
   ["Claude Sonnet 4.6", "Claw Dev Sonnet Slot"],
   ["Claude Haiku 4.5", "Claw Dev Haiku Slot"],
+  [
+    "Claude Code has switched from npm to native installer. Run `claude install` or see https://docs.anthropic.com/en/docs/claude-code/getting-started",
+    "Claw Dev is running through the local multi-provider launcher.",
+  ],
   ["Opus 4.6", "Opus Slot"],
   ["Sonnet 4.6", "Sonnet Slot"],
   ["Haiku 4.5", "Haiku Slot"],

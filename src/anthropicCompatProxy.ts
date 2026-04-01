@@ -1287,11 +1287,46 @@ function compactOpenAICompatibleTools(
         provider === "copilot" && mode === "minimal"
           ? {
               type: "object",
+              properties: {},
+              required: [],
               additionalProperties: true,
             }
-          : tool.function.parameters,
+          : normalizeJsonSchemaForOpenAI(tool.function.parameters),
     },
   }));
+}
+
+function normalizeJsonSchemaForOpenAI(schema: Record<string, unknown>): Record<string, unknown> {
+  const copy = structuredClone(schema);
+  return normalizeJsonSchemaNode(copy);
+}
+
+function normalizeJsonSchemaNode(value: Record<string, unknown>): Record<string, unknown> {
+  if (value.type === "object") {
+    if (!isRecord(value.properties)) {
+      value.properties = {};
+    }
+
+    const properties = value.properties as Record<string, unknown>;
+    for (const [key, child] of Object.entries(properties)) {
+      if (isRecord(child)) {
+        properties[key] = normalizeJsonSchemaNode(child);
+      }
+    }
+  }
+
+  if (value.type === "array" && isRecord(value.items)) {
+    value.items = normalizeJsonSchemaNode(value.items);
+  }
+
+  for (const key of ["anyOf", "oneOf", "allOf"]) {
+    const variants = value[key];
+    if (Array.isArray(variants)) {
+      value[key] = variants.map((entry) => (isRecord(entry) ? normalizeJsonSchemaNode(entry) : entry));
+    }
+  }
+
+  return value;
 }
 
 function estimateOpenAICompatiblePayload(
